@@ -19,7 +19,12 @@ const messageSchema = new mongoose.Schema({
     type: String,
     enum: ["sent", "delivered"],
     default: "sent"
-  }
+  },
+  replyTo: {
+  _id: String,
+  text: String,
+  sender: String
+}
 }, { timestamps: true });
 
 module.exports = mongoose.model("Message", messageSchema);

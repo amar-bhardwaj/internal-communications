@@ -4,6 +4,8 @@ const router = express.Router();
 const auth = require("../middleware/authMiddleware");
 const Message = require("../models/Message");
 
+const Notification = require("../models/Notification");
+
 
 // ✏️ EDIT MESSAGE (ONLY SENDER + TIME LIMIT)
 router.put("/edit/:id", auth, async (req, res) => {
@@ -24,25 +26,31 @@ router.put("/edit/:id", auth, async (req, res) => {
     // ⏱ TIME LIMIT (5 minutes)
     const now = new Date();
     const created = new Date(msg.createdAt);
-    const diff = (now - created) / 1000; // seconds
+    const diff = (now - created) / 1000;
 
-    if (diff > 300) {
+    if (diff > 1800) {
       return res.status(400).json({
-        message: "Edit time expired (5 minutes)"
+        message: "Edit time expired (30 minutes)"
       });
     }
 
     msg.text = text;
     await msg.save();
 
-    res.json({ message: "Message updated", data: msg });
+    const updated = await Message.findById(msg._id)
+      .populate("sender", "fullName username");
+
+    // ✅🔥 REAL-TIME EMIT
+    if (req.io) {
+      req.io.to(msg.department.toString()).emit("messageEdited", updated);
+    }
+
+    res.json({ message: "Message updated", data: updated });
 
   } catch (err) {
     res.status(500).json({ message: "Error editing message" });
   }
 });
-
-
 
 
 // 🗑 DELETE MESSAGE (ADMIN ONLY)
@@ -61,7 +69,14 @@ router.delete("/delete/:id", auth, async (req, res) => {
       });
     }
 
+    const departmentId = msg.department;
+
     await msg.deleteOne();
+
+    // ✅🔥 REAL-TIME EMIT
+    if (req.io) {
+      req.io.to(departmentId.toString()).emit("messageDeleted", msg._id);
+    }
 
     res.json({ message: "Message deleted" });
 
@@ -71,29 +86,29 @@ router.delete("/delete/:id", auth, async (req, res) => {
 });
 
 
-
-
 // ✅ SEND MESSAGE
 router.post("/send", auth, async (req, res) => {
   try {
-    const { text, department, fileUrl } = req.body;
+    const { text, department, fileUrl, fileName, replyTo } = req.body;
 
     const message = new Message({
       sender: req.user.id,
       department,
       text,
       fileUrl,
+      fileName,
+      replyTo,
       status: "sent"
     });
 
     await message.save();
 
-    // ✅ Populate sender name (IMPORTANT)
     const populatedMessage = await Message.findById(message._id)
       .populate("sender", "fullName");
 
-    // ✅ Emit via socket (IMPORTANT)
-    req.io.to(department).emit("receiveMessage", populatedMessage);
+    if (req.io) {
+      req.io.to(department).emit("receiveMessage", populatedMessage);
+    }
 
     res.json({ message: "Message sent", data: populatedMessage });
 
@@ -103,19 +118,50 @@ router.post("/send", auth, async (req, res) => {
 });
 
 
-// ✅ GET MESSAGES (already correct, just slight improvement)
+
+
+router.put("/notification/read/:id", auth, async (req, res) => {
+  try {
+    await Notification.findByIdAndUpdate(req.params.id, {
+      $addToSet: { readBy: req.user.id }
+    });
+
+    res.json({ message: "Marked as read" });
+  } catch {
+    res.status(500).json({ message: "Error" });
+  }
+});
+
+
+// ✅ GET MESSAGES
 router.get("/:departmentId", auth, async (req, res) => {
   try {
     const messages = await Message.find({
       department: req.params.departmentId
     })
-      .populate("sender", "fullName") // cleaned
+      .populate("sender", "fullName")
       .sort({ createdAt: 1 });
 
     res.json(messages);
 
   } catch (err) {
     res.status(500).json({ message: "Error fetching messages" });
+  }
+});
+
+
+// 🔔 GET NOTIFICATIONS
+router.get("/notifications/:departmentId", auth, async (req, res) => {
+  try {
+    const notifications = await Notification.find({
+      departments: req.params.departmentId
+    })
+      .populate("sender", "fullName")
+      .sort({ createdAt: -1 });
+
+    res.json(notifications);
+  } catch (err) {
+    res.status(500).json({ message: "Error fetching notifications" });
   }
 });
 

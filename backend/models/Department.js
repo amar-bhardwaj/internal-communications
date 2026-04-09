@@ -5,7 +5,15 @@ const departmentSchema = new mongoose.Schema({
     type: String,
     required: true,
     unique: true
-  }
-});
+  },
+
+  // 🔥 NEW: Managers for this department
+  managers: [
+    {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User"
+    }
+  ]
+}, { timestamps: true });
 
 module.exports = mongoose.model("Department", departmentSchema);

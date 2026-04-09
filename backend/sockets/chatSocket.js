@@ -1,60 +1,139 @@
-let onlineUsers = {};
+const onlineUsers = new Map();
+
+const Notification = require("../models/Notification");
 
 module.exports = (io) => {
   io.on("connection", (socket) => {
-    console.log("🟢 User connected:", socket.id);
+    console.log("🟢 Connected:", socket.id);
 
-    // ✅ USER COMES ONLINE
+    // ✅ ONLINE USERS
     socket.on("userOnline", (userId) => {
-      onlineUsers[userId] = socket.id;
+      if (!userId) return;
 
-      console.log("ONLINE USERS:", Object.keys(onlineUsers));
-
-      io.emit("onlineUsers", Object.keys(onlineUsers));
+      onlineUsers.set(userId, socket.id);
+      io.emit("onlineUsers", Array.from(onlineUsers.keys()));
     });
 
-    // JOIN ROOM
-    socket.on("joinDepartment", (departmentId) => {
+    // ✅ EMPLOYEE JOIN
+    socket.on("joinDepartment", ({ departmentId, user }) => {
+      if (!departmentId || !user) return;
+
+      // ✅ ADMIN can join any department
+      if (user.role === "admin") {
+        socket.join(departmentId);
+        console.log("👨‍💼 Admin joined:", departmentId);
+        return;
+      }
+
+      // ✅ MANAGER & EMPLOYEE → only their department
+      if (user.department === departmentId) {
+        socket.join(departmentId);
+        console.log("👤 Joined own dept:", departmentId);
+      } else {
+        console.log("⛔ Unauthorized room access blocked");
+      }
+    });
+
+    // ✅ ADMIN JOIN ANY DEPARTMENT
+    socket.on("joinAdminRoom", (departmentId) => {
+      if (!departmentId) return;
+
       socket.join(departmentId);
+      console.log("👨‍💼 Admin joined:", departmentId);
     });
 
 
-    socket.on("receiveMessage", (msg) => {
-      setMessages((prev) => [...prev, msg]);
+    // ✅ ADMIN JOIN ALL DEPARTMENTS
+    // ✅ ADMIN JOIN ALL DEPARTMENTS
+    socket.on("joinAllDepartments", async () => {
+      try {
+        const Department = require("../models/Department");
 
-      if (msg.sender?._id !== userId) {
-        audioRef.current?.play().catch(() => { });
+        const departments = await Department.find();
 
-        if (document.hidden) {
-          alert("📩 New message received");
-        }
+        departments.forEach((dept) => {
+          socket.join(dept._id.toString());
+        });
+
+        console.log("👨‍💼 Admin joined ALL departments");
+      } catch (err) {
+        console.error("Join all departments error:", err);
       }
     });
 
-    // SEND MESSAGE
-    socket.on("sendMessage", async (data) => {
-      io.to(data.department).emit("receiveMessage", {
-        ...data,
-        status: "delivered"
-      });
+
+    // ✅ SEND MESSAGE
+    socket.on("sendMessage", (data) => {
+      if (!data.department) return;
+
+      io.to(data.department).emit("receiveMessage", data);
     });
 
-    // TYPING
-    socket.on("typing", ({ departmentId, name }) => {
-      socket.to(departmentId).emit("typing", name);
+    // ✅ EDIT
+    socket.on("editMessage", (msg) => {
+      io.to(msg.department).emit("messageEdited", msg);
     });
 
-    // DISCONNECT
+    // ✅ DELETE
+    socket.on("deleteMessage", ({ id, department }) => {
+      io.to(department).emit("messageDeleted", id);
+    });
+
+    // ✅ TYPING
+    socket.on("typing", ({ departmentId, userName }) => {
+      socket.to(departmentId).emit("typing", userName);
+    });
+
+
+
+    // 🔔 SEND NOTIFICATION (ADMIN + MANAGER)
+    socket.on("sendNotification", async (data) => {
+      try {
+        let { departments, message, sender, fileUrl, departmentId } = data;
+
+        if (!message) return;
+
+        // ✅ FIX: MANAGER SUPPORT
+        if (!departments || departments.length === 0) {
+          if (departmentId) {
+            departments = [departmentId]; // manager case
+          } else {
+            console.log("❌ No departments provided");
+            return;
+          }
+        }
+
+        const newNotification = new Notification({
+          message,
+          departments,
+          sender,
+          fileUrl
+        });
+
+        await newNotification.save();
+
+        departments.forEach((dept) => {
+          io.to(dept.toString()).emit("notification", newNotification);
+        });
+
+        console.log("✅ Notification sent to:", departments);
+
+      } catch (err) {
+        console.error("❌ Notification error:", err);
+      }
+    });
+
+    // ❌ DISCONNECT
     socket.on("disconnect", () => {
-      for (let userId in onlineUsers) {
-        if (onlineUsers[userId] === socket.id) {
-          delete onlineUsers[userId];
+      for (let [uid, sid] of onlineUsers.entries()) {
+        if (sid === socket.id) {
+          onlineUsers.delete(uid);
+          break;
         }
       }
 
-      io.emit("onlineUsers", Object.keys(onlineUsers));
-
-      console.log("🔴 User disconnected:", socket.id);
+      io.emit("onlineUsers", Array.from(onlineUsers.keys()));
     });
+
   });
 };

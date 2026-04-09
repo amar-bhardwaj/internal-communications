@@ -40,6 +40,7 @@ app.use("/api/auth", authRoutes);
 app.use("/api/admin", adminRoutes);
 app.use("/api/messages", messageRoutes);
 app.use("/api/upload", uploadRoutes);
+app.use("/uploads", express.static("uploads"));
 
 // DB
 mongoose.connect(process.env.MONGO_URI)

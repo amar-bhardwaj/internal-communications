@@ -6,7 +6,8 @@ const auth = require("../middleware/authMiddleware");
 // Upload file
 router.post("/", auth, upload.single("file"), (req, res) => {
   res.json({
-    fileUrl: req.file.path
+    fileUrl: req.file.path,
+    originalName: req.file.originalname
   });
 });
 

@@ -6,6 +6,7 @@ const auth = require("../middleware/authMiddleware");
 // Models
 const Department = require("../models/Department");
 const User = require("../models/User");
+const Notification = require("../models/Notification");
 
 const bcrypt = require("bcryptjs");
 
@@ -150,7 +151,8 @@ router.post("/reset-password", auth, async (req, res) => {
 //Get users
 router.get("/users", auth, async (req, res) => {
   try {
-    const users = await User.find().populate("department", "name");
+    const users = await User.find({ role: { $ne: "admin" } })
+      .populate("department", "name");
 
     res.json(users);
   } catch (err) {
@@ -185,6 +187,102 @@ router.get("/users/:departmentId", auth, async (req, res) => {
 });
 
 
-//
+
+// ✅ ASSIGN MANAGER
+router.post("/assign-manager", auth, async (req, res) => {
+  try {
+    const { departmentId, userId } = req.body;
+
+    const dept = await Department.findById(departmentId);
+
+    if (!dept) {
+      return res.status(404).json({ message: "Department not found" });
+    }
+
+    if (!dept.managers.includes(userId)) {
+      dept.managers.push(userId);
+      await dept.save();
+    }
+
+    await User.findByIdAndUpdate(userId, {
+      role: "manager",
+      department: departmentId
+    });
+
+    res.json({ message: "Manager assigned" });
+
+  } catch (err) {
+    res.status(500).json({ message: "Error assigning manager" });
+  }
+});
+
+
+// ✅ REMOVE MANAGER (MAKE EMPLOYEE AGAIN)
+router.post("/remove-manager", auth, async (req, res) => {
+  try {
+    const { userId } = req.body;
+
+    const user = await User.findById(userId);
+
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    // 🔥 Remove from department managers list
+    await Department.updateMany(
+      { managers: userId },
+      { $pull: { managers: userId } }
+    );
+
+    // 🔥 Change role back to employee
+    user.role = "employee";
+    await user.save();
+
+    res.json({ message: "Manager removed (now employee)" });
+
+  } catch (err) {
+    res.status(500).json({ message: "Error removing manager" });
+  }
+});
+
+
+// 🔔 GET ALL NOTIFICATIONS (ADMIN)
+
+router.get("/notifications", auth, async (req, res) => {
+  try {
+    const notifications = await Notification.find()
+      .populate("sender", "fullName")
+      .sort({ createdAt: -1 });
+
+    res.json(notifications);
+  } catch (err) {
+    res.status(500).json({ message: "Error fetching notifications" });
+  }
+});
+
+
+// 🗑 DELETE NOTIFICATION (ADMIN)
+router.delete("/notification/:id", auth, async (req, res) => {
+  try {
+    const notification = await Notification.findById(req.params.id);
+
+    if (!notification) {
+      return res.status(404).json({ message: "Not found" });
+    }
+
+    await notification.deleteOne();
+
+    // 🔥 REALTIME DELETE
+    if (req.io) {
+      req.io.emit("notificationDeleted", req.params.id);
+    }
+
+    res.json({ message: "Notification deleted" });
+
+  } catch (err) {
+    res.status(500).json({ message: "Error deleting notification" });
+  }
+});
+
 
 module.exports = router;
