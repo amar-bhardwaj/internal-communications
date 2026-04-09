@@ -1,163 +1,209 @@
 import { useEffect, useState } from "react";
+import Users from "./Users";
+import Departments from "./Departments";
+import Header from "../components/Header";
+import Footer from "../components/Footer";
+import Chat from "../components/Chat";
+import socket from "../services/socket";
 import API from "../services/api";
+import Notifications from "../pages/Notifications";
 
 const AdminDashboard = () => {
-  const [users, setUsers] = useState([]);
+  const [active, setActive] = useState("chat");
+  const [unread, setUnread] = useState({});
+
+  const [notificationMsg, setNotificationMsg] = useState("");
   const [departments, setDepartments] = useState([]);
-  const [deptName, setDeptName] = useState("");
+  const [selectedDepts, setSelectedDepts] = useState([]);
+  const [file, setFile] = useState(null); // ✅ FILE STATE
 
-  const [newUser, setNewUser] = useState({
-    fullName: "",
-    username: "",
-    password: ""
-  });
-
-  const [selectedDept, setSelectedDept] = useState("");
+  const userId = localStorage.getItem("userId");
 
   useEffect(() => {
-    fetchUsers();
-    fetchDepartments();
+    socket.emit("userOnline", userId);
+
+    socket.on("receiveMessage", (msg) => {
+      if (!msg.department) return;
+
+      setUnread((prev) => ({
+        ...prev,
+        [msg.department]: (prev[msg.department] || 0) + 1
+      }));
+    });
+
+    return () => {
+      socket.off("receiveMessage");
+    };
   }, []);
 
-  const fetchUsers = async () => {
-    const res = await API.get("/admin/users");
-    setUsers(res.data);
+  // FETCH DEPARTMENTS
+  useEffect(() => {
+    fetch("http://127.0.0.1:5000/api/admin/departments", {
+      headers: {
+        Authorization: `Bearer ${localStorage.getItem("token")}`
+      }
+    })
+      .then((res) => res.json())
+      .then((data) => setDepartments(data || []))
+      .catch(() => setDepartments([]));
+  }, []);
+
+  const handleNavigation = (page) => {
+    setActive(page);
   };
 
-  const fetchDepartments = async () => {
-    const res = await API.get("/admin/departments");
-    setDepartments(res.data);
-  };
+  // ✅ FULL FIXED SEND NOTIFICATION (WITH FILE SUPPORT)
+  const sendNotification = async () => {
+    if (!notificationMsg) {
+      alert("Enter notification message");
+      return;
+    }
 
-  // ✅ CREATE DEPARTMENT
-  const createDepartment = async () => {
-    if (!deptName) return;
+    let targetDepts = selectedDepts;
 
-    await API.post("/admin/create-department", { name: deptName });
-    setDeptName("");
-    fetchDepartments();
-  };
+    if (targetDepts.length === 0) {
+      targetDepts = departments.map((d) => d._id);
+    }
 
-  // ✅ DELETE DEPARTMENT
-  const deleteDepartment = async (name) => {
-    await API.delete("/admin/delete-department", {
-      data: { name }
+    let fileUrl = "";
+
+    // ✅ UPLOAD FILE FIRST
+    if (file) {
+      const formData = new FormData();
+      formData.append("file", file);
+
+      try {
+        const res = await API.post("/upload", formData, {
+          headers: {
+            "Content-Type": "multipart/form-data"
+          }
+        });
+
+        fileUrl = res.data.fileUrl;
+      } catch (err) {
+        console.error("File upload failed");
+      }
+    }
+
+    // ✅ SEND SOCKET EVENT
+    socket.emit("sendNotification", {
+      message: notificationMsg,
+      departments: targetDepts,
+      sender: userId,
+      fileUrl // ✅ IMPORTANT
     });
-    fetchDepartments();
+
+    alert("Notification sent");
+
+    // RESET
+    setNotificationMsg("");
+    setSelectedDepts([]);
+    setFile(null);
   };
 
-  // ✅ CREATE USER
-  const createUser = async () => {
-    await API.post("/auth/register", newUser);
-    setNewUser({ fullName: "", username: "", password: "" });
-    fetchUsers();
-  };
-
-  // ✅ DELETE USER
-  const deleteUser = async (id) => {
-    await API.delete(`/admin/delete-user/${id}`);
-    fetchUsers();
-  };
-
-  // ✅ ASSIGN DEPARTMENT
-  const assignDept = async (userId) => {
-    if (!selectedDept) return alert("Select department");
-
-    await API.post("/admin/add-employee", {
-      userId,
-      department: selectedDept
-    });
-
-    fetchUsers();
+  const toggleDept = (id) => {
+    setSelectedDepts((prev) =>
+      prev.includes(id)
+        ? prev.filter((d) => d !== id)
+        : [...prev, id]
+    );
   };
 
   return (
-    <div className="admin">
-      <h2>Admin Dashboard</h2>
+    <div className="app">
+      <Header />
 
-      {/* ================= DEPARTMENTS ================= */}
-      <div className="departments">
-        <h3>Departments</h3>
+      <div className="main">
+        <div className="sidebar">
+          <h3>⚙️ Admin Panel</h3>
 
-        <input
-          placeholder="New Department"
-          value={deptName}
-          onChange={(e) => setDeptName(e.target.value)}
-        />
-
-        <button onClick={createDepartment}>Create</button>
-
-        {departments.map((d) => (
-          <div key={d._id}>
-            {d.name}
-            <button onClick={() => deleteDepartment(d.name)}>
-              Delete
-            </button>
+          <div
+            className="userItem"
+            onClick={() => handleNavigation("chat")}
+          >
+            💬 Chat
           </div>
-        ))}
-      </div>
 
-      {/* ================= CREATE USER ================= */}
-      <div className="createUser">
-        <h3>Create User</h3>
-
-        <input
-          placeholder="Full Name"
-          value={newUser.fullName}
-          onChange={(e) =>
-            setNewUser({ ...newUser, fullName: e.target.value })
-          }
-        />
-
-        <input
-          placeholder="Username"
-          value={newUser.username}
-          onChange={(e) =>
-            setNewUser({ ...newUser, username: e.target.value })
-          }
-        />
-
-        <input
-          type="password"
-          placeholder="Password"
-          value={newUser.password}
-          onChange={(e) =>
-            setNewUser({ ...newUser, password: e.target.value })
-          }
-        />
-
-        <button onClick={createUser}>Create</button>
-      </div>
-
-      {/* ================= USERS ================= */}
-      <div className="users">
-        <h3>All Users</h3>
-
-        <select onChange={(e) => setSelectedDept(e.target.value)}>
-          <option value="">Assign Department</option>
-          {departments.map((d) => (
-            <option key={d._id} value={d._id}>
-              {d.name}
-            </option>
-          ))}
-        </select>
-
-        {users.map((u) => (
-          <div key={u._id} className="userCard">
-            <p><strong>{u.fullName}</strong></p>
-            <p>{u.username}</p>
-            <p>{u.department?.name || "No Dept"}</p>
-
-            <button onClick={() => assignDept(u._id)}>
-              Assign Dept
-            </button>
-
-            <button onClick={() => deleteUser(u._id)}>
-              Delete
-            </button>
+          <div
+            className="userItem"
+            onClick={() => handleNavigation("users")}
+          >
+            👥 Users
           </div>
-        ))}
+
+          <div
+            className="userItem"
+            onClick={() => handleNavigation("departments")}
+          >
+            🏢 Departments
+          </div>
+
+          <div
+            className="userItem"
+            onClick={() => handleNavigation("notifications")}
+          >
+            🔔 Notifications
+          </div>
+        </div>
+
+        <div style={{ flex: 1, padding: "20px" }}>
+          {active === "chat" && <Chat />}
+          {active === "users" && <Users />}
+          {active === "departments" && <Departments />}
+
+          {active === "notifications" && (
+            <div>
+
+              {/* 🔔 SEND NOTIFICATION */}
+              <div className="adminCard">
+                <h3>Send Notification 🔔</h3>
+
+                <textarea
+                  placeholder="Enter notification message..."
+                  value={notificationMsg}
+                  onChange={(e) => setNotificationMsg(e.target.value)}
+                  style={{ width: "100%", height: "80px" }}
+                />
+
+                <h4>Select Departments (optional)</h4>
+
+                <div style={{ display: "flex", flexWrap: "wrap", gap: "10px" }}>
+                  {departments.map((d) => (
+                    <label key={d._id}>
+                      <input
+                        type="checkbox"
+                        checked={selectedDepts.includes(d._id)}
+                        onChange={() => toggleDept(d._id)}
+                      />
+                      {d.name}
+                    </label>
+                  ))}
+                </div>
+
+                <input
+                  type="file"
+                  onChange={(e) => setFile(e.target.files[0])}
+                  style={{ marginTop: "10px" }}
+                />
+
+                <button onClick={sendNotification} style={{ marginTop: "10px" }}>
+                  Send Notification
+                </button>
+
+                <p style={{ fontSize: "12px", marginTop: "10px" }}>
+                  * If no department selected → sends to ALL users
+                </p>
+              </div>
+
+              {/* 🔥 SHOW NOTIFICATIONS (THIS WAS MISSING) */}
+              <Notifications />
+
+            </div>
+          )}
+        </div>
       </div>
+
+      <Footer />
     </div>
   );
 };

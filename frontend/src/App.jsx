@@ -1,47 +1,47 @@
 import { useState } from "react";
 import Login from "./pages/Login";
-import AdminDashboard from "./pages/AdminDashboard";
 import Header from "./components/Header";
-import Footer from "./components/Footer";
 import Sidebar from "./components/Sidebar";
 import Chat from "./components/Chat";
+import AdminDashboard from "./pages/AdminDashboard";
+import UsersPage from "./pages/UsersPage";
+import DepartmentsPage from "./pages/DepartmentsPage";
+import Notifications from "./pages/Notifications";
 import "./index.css";
 
 function App() {
   const [user, setUser] = useState(!!localStorage.getItem("token"));
+  const [page, setPage] = useState("chat");
 
-  // ✅ SAFE ROLE EXTRACTION
-  const token = localStorage.getItem("token");
-
-  let role = null;
-
-  if (token) {
-    try {
-      role = JSON.parse(atob(token.split(".")[1])).role;
-    } catch (err) {
-      role = null;
-    }
-  }
-
-  // ✅ NOT LOGGED IN → LOGIN PAGE
   if (!user) return <Login setUser={setUser} />;
 
-  // ✅ ADMIN VIEW
+  const role = localStorage.getItem("role");
+
+  if (!user) return <Login setUser={setUser} />;
+
   if (role === "admin") {
     return <AdminDashboard />;
   }
 
-  // ✅ EMPLOYEE VIEW (DEFAULT)
   return (
     <div className="app">
       <Header />
 
       <div className="main">
-        <Sidebar />
-        <Chat />
-      </div>
+        <Sidebar setPage={setPage} />
 
-      <Footer />
+        {/* 🔥 DYNAMIC CONTENT */}
+        {role === "admin" ? (
+          page === "chat" ? <Chat /> :
+            page === "users" ? <UsersPage /> :
+              page === "departments" ? <DepartmentsPage /> :
+                <AdminDashboard />
+        ) : (
+          page === "chat" ? <Chat /> :
+            page === "notifications" ? <Notifications /> :
+              <Chat />
+        )}
+      </div>
     </div>
   );
 }

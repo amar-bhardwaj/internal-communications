@@ -8,47 +8,43 @@ const Login = ({ setUser }) => {
     try {
       const res = await API.post("/auth/login", form);
 
-      console.log("LOGIN RESPONSE:", res.data);
-
-      // ✅ SAVE TOKEN
       localStorage.setItem("token", res.data.token);
-
-      // ✅ SAVE USER DATA (IMPORTANT)
       localStorage.setItem("userId", res.data.user.id);
       localStorage.setItem("userName", res.data.user.fullName);
       localStorage.setItem("role", res.data.user.role);
-
-      // ✅ SAVE DEPARTMENT
       localStorage.setItem("department", res.data.user.department);
 
       setUser(true);
-
     } catch (err) {
-      console.error(err);
       alert(err.response?.data?.message || "Login failed");
     }
   };
 
   return (
-    <div className="login">
-      <h2>Login</h2>
+    <div className="loginPage">
 
-      <input
-        placeholder="Username"
-        onChange={(e) =>
-          setForm({ ...form, username: e.target.value })
-        }
-      />
+      <div className="loginCard">
+        <h2>Saanvi Technologies<br /><span style={{fontSize:"20px", fontWeight:"normal"}}>Intercom Panel</span></h2>
+        <p className="subText">Login to continue</p>
 
-      <input
-        type="password"
-        placeholder="Password"
-        onChange={(e) =>
-          setForm({ ...form, password: e.target.value })
-        }
-      />
+        <input
+          placeholder="Username"
+          onChange={(e) =>
+            setForm({ ...form, username: e.target.value })
+          }
+        />
 
-      <button onClick={login}>Login</button>
+        <input
+          type="password"
+          placeholder="Password"
+          onChange={(e) =>
+            setForm({ ...form, password: e.target.value })
+          }
+        />
+
+        <button onClick={login}>Login</button>
+      </div>
+
     </div>
   );
 };
