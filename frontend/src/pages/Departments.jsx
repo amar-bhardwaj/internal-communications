@@ -247,8 +247,8 @@ const Departments = () => {
   return (
     <div style={styles.container}>
       <div style={styles.header}>
-        <h1 style={styles.title}>🏢 Department Management</h1>
-        <p style={styles.subtitle}>Manage your organization departments</p>
+        <h1 style={styles.title}>🏢 Departments</h1>
+        <p style={styles.subtitle}>Manage all departments</p>
       </div>
 
       {/* Create Department Section */}

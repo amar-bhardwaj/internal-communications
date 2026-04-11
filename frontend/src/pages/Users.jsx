@@ -20,6 +20,10 @@ const Users = () => {
     departmentId: ""
   });
 
+  // Pagination states
+  const [currentPage, setCurrentPage] = useState(1);
+  const [usersPerPage] = useState(20);
+
   useEffect(() => {
     fetchUsers();
     fetchDepartments();
@@ -106,7 +110,7 @@ const Users = () => {
     }
   };
 
-  // ✅ REMOVE MANAGER (🔥 FIX)
+  // ✅ REMOVE MANAGER
   const removeManager = async (userId) => {
     if (!window.confirm("Make this user an employee again?")) return;
 
@@ -121,8 +125,6 @@ const Users = () => {
     }
   };
 
-
-
   const filteredUsers = users.filter((u) => {
     const matchesSearch = u.fullName
       ?.toLowerCase()
@@ -135,6 +137,45 @@ const Users = () => {
     return matchesSearch && matchesDept;
   });
 
+  // Search and filter for All Users section
+  const [userListSearch, setUserListSearch] = useState("");
+  const [userListDept, setUserListDept] = useState("");
+
+  const filteredUserList = users.filter((u) => {
+    const matchesSearch = u.fullName
+      ?.toLowerCase()
+      .includes(userListSearch.toLowerCase());
+
+    const matchesDept = userListDept
+      ? u.department?._id === userListDept
+      : true;
+
+    return matchesSearch && matchesDept;
+  });
+
+  // Pagination logic
+  const indexOfLastUser = currentPage * usersPerPage;
+  const indexOfFirstUser = indexOfLastUser - usersPerPage;
+  const currentUsers = filteredUserList.slice(indexOfFirstUser, indexOfLastUser);
+  const totalPages = Math.ceil(filteredUserList.length / usersPerPage);
+
+  // Change page
+  const paginate = (pageNumber) => setCurrentPage(pageNumber);
+  const nextPage = () => {
+    if (currentPage < totalPages) {
+      setCurrentPage(currentPage + 1);
+    }
+  };
+  const prevPage = () => {
+    if (currentPage > 1) {
+      setCurrentPage(currentPage - 1);
+    }
+  };
+
+  // Reset to first page when search/filter changes
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [userListSearch, userListDept]);
 
   return (
     <div>
@@ -265,9 +306,36 @@ const Users = () => {
       <div className="adminCard">
         <h3>All Users</h3>
 
-        {filteredUsers.length === 0 && <p>No users found</p>}
+        {/* Search and Filter for All Users section */}
+        <div style={{ marginBottom: "15px", display: "flex", gap: "10px" }}>
+          <input
+            type="text"
+            placeholder="🔍 Search users by name..."
+            value={userListSearch}
+            onChange={(e) => setUserListSearch(e.target.value)}
+            style={{ flex: 1 }}
+          />
+          <select
+            value={userListDept}
+            onChange={(e) => setUserListDept(e.target.value)}
+          >
+            <option value="">All Departments</option>
+            {departments.map((d) => (
+              <option key={d._id} value={d._id}>
+                {d.name}
+              </option>
+            ))}
+          </select>
+        </div>
 
-        {users.map((u) => (
+        {/* Show total count */}
+        <div style={{ marginBottom: "10px", fontSize: "14px", color: "#666" }}>
+          Showing {indexOfFirstUser + 1} to {Math.min(indexOfLastUser, filteredUserList.length)} of {filteredUserList.length} users
+        </div>
+
+        {currentUsers.length === 0 && <p>No users found</p>}
+
+        {currentUsers.map((u) => (
           <div key={u._id} className="adminRow">
             <div>
               <strong>{u.fullName}</strong> ({u.username}) <br />
@@ -292,6 +360,123 @@ const Users = () => {
             </div>
           </div>
         ))}
+
+        {/* Pagination Controls */}
+        {filteredUserList.length > usersPerPage && (
+          <div style={{
+            marginTop: "20px",
+            display: "flex",
+            justifyContent: "center",
+            alignItems: "center",
+            gap: "10px",
+            flexWrap: "wrap"
+          }}>
+            <button
+              onClick={prevPage}
+              disabled={currentPage === 1}
+              style={{
+                padding: "8px 16px",
+                cursor: currentPage === 1 ? "not-allowed" : "pointer",
+                opacity: currentPage === 1 ? 0.5 : 1,
+                backgroundColor: "#667eea",
+                color: "white",
+                border: "none",
+                borderRadius: "6px"
+              }}
+            >
+              ← Previous
+            </button>
+            
+            <div style={{ display: "flex", gap: "5px", flexWrap: "wrap", justifyContent: "center" }}>
+              {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                let pageNum;
+                if (totalPages <= 5) {
+                  pageNum = i + 1;
+                } else if (currentPage <= 3) {
+                  pageNum = i + 1;
+                } else if (currentPage >= totalPages - 2) {
+                  pageNum = totalPages - 4 + i;
+                } else {
+                  pageNum = currentPage - 2 + i;
+                }
+                
+                return (
+                  <button
+                    key={pageNum}
+                    onClick={() => paginate(pageNum)}
+                    style={{
+                      padding: "8px 14px",
+                      cursor: "pointer",
+                      backgroundColor: currentPage === pageNum ? "#764ba2" : "#e0e0e0",
+                      color: currentPage === pageNum ? "white" : "#333",
+                      border: "none",
+                      borderRadius: "6px",
+                      transition: "all 0.2s"
+                    }}
+                    onMouseEnter={(e) => {
+                      if (currentPage !== pageNum) {
+                        e.currentTarget.style.backgroundColor = "#667eea";
+                        e.currentTarget.style.color = "white";
+                      }
+                    }}
+                    onMouseLeave={(e) => {
+                      if (currentPage !== pageNum) {
+                        e.currentTarget.style.backgroundColor = "#e0e0e0";
+                        e.currentTarget.style.color = "#333";
+                      }
+                    }}
+                  >
+                    {pageNum}
+                  </button>
+                );
+              })}
+              
+              {totalPages > 5 && currentPage < totalPages - 2 && (
+                <span style={{ padding: "8px 5px" }}>...</span>
+              )}
+              
+              {totalPages > 5 && currentPage < totalPages - 2 && (
+                <button
+                  onClick={() => paginate(totalPages)}
+                  style={{
+                    padding: "8px 14px",
+                    cursor: "pointer",
+                    backgroundColor: "#e0e0e0",
+                    color: "#333",
+                    border: "none",
+                    borderRadius: "6px"
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.backgroundColor = "#667eea";
+                    e.currentTarget.style.color = "white";
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.backgroundColor = "#e0e0e0";
+                    e.currentTarget.style.color = "#333";
+                  }}
+                >
+                  {totalPages}
+                </button>
+              )}
+            </div>
+            
+            <button
+              onClick={nextPage}
+              disabled={currentPage === totalPages}
+              style={{
+                padding: "8px 16px",
+                cursor: currentPage === totalPages ? "not-allowed" : "pointer",
+                opacity: currentPage === totalPages ? 0.5 : 1,
+                backgroundColor: "#667eea",
+                color: "white",
+                border: "none",
+                borderRadius: "6px"
+              }}
+            >
+              Next →
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );
