@@ -4,6 +4,8 @@ import socket from "../services/socket";
 
 const Notifications = () => {
     const [notifications, setNotifications] = useState([]);
+    const [currentPage, setCurrentPage] = useState(1);
+    const perPage = 10;
 
     const role = localStorage.getItem("role");
 
@@ -11,6 +13,13 @@ const Notifications = () => {
     const userId = localStorage.getItem("userId"); // ✅ NEW
 
     const audioRef = useRef(null);
+
+    const indexOfLast = currentPage * perPage;
+    const indexOfFirst = indexOfLast - perPage;
+
+    const currentNotifications = notifications.slice(indexOfFirst, indexOfLast);
+
+    const totalPages = Math.ceil(notifications.length / perPage);
 
     useEffect(() => {
         audioRef.current = new Audio("/warning.wav");
@@ -52,6 +61,7 @@ const Notifications = () => {
             }
 
             setNotifications(res.data || []);
+            setCurrentPage(1);
         } catch {
             setNotifications([]);
         }
@@ -97,7 +107,7 @@ const Notifications = () => {
 
             {notifications.length === 0 && <p>No notifications</p>}
 
-            {notifications.map((n) => {
+            {currentNotifications.map((n) => {
 
                 // ✅ CHECK READ STATUS
                 const isRead = n.readBy?.includes(userId);
@@ -151,7 +161,7 @@ const Notifications = () => {
                         {role === "admin" && (
                             <button
                                 onClick={(e) => {
-                                    e.stopPropagation(); 
+                                    e.stopPropagation();
                                     deleteNotification(n._id);
                                 }}
                             >
@@ -161,6 +171,26 @@ const Notifications = () => {
                     </div>
                 );
             })}
+            {/* PAGINATION */}
+            <div style={{ marginTop: "20px", display: "flex", gap: "10px" }}>
+                <button
+                    disabled={currentPage === 1}
+                    onClick={() => setCurrentPage((prev) => prev - 1)}
+                >
+                    ⬅ Prev
+                </button>
+
+                <span>
+                    Page {currentPage} of {totalPages || 1}
+                </span>
+
+                <button
+                    disabled={currentPage === totalPages}
+                    onClick={() => setCurrentPage((prev) => prev + 1)}
+                >
+                    Next ➡
+                </button>
+            </div>
         </div>
     );
 };

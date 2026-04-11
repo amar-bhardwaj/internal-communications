@@ -7,6 +7,7 @@ import Chat from "../components/Chat";
 import socket from "../services/socket";
 import API from "../services/api";
 import Notifications from "../pages/Notifications";
+import OnlineUsers from "../components/OnlineUsers";
 
 const AdminDashboard = () => {
   const [active, setActive] = useState("chat");
@@ -16,8 +17,16 @@ const AdminDashboard = () => {
   const [departments, setDepartments] = useState([]);
   const [selectedDepts, setSelectedDepts] = useState([]);
   const [file, setFile] = useState(null); // ✅ FILE STATE
-
+  const [notifications, setNotifications] = useState([]);
+  const [currentPage, setCurrentPage] = useState(1);
+  const perPage = 10;
   const userId = localStorage.getItem("userId");
+  const indexOfLast = currentPage * perPage;
+  const indexOfFirst = indexOfLast - perPage;
+
+  const currentNotifications = notifications.slice(indexOfFirst, indexOfLast);
+
+  const totalPages = Math.ceil(notifications.length / perPage);
 
   useEffect(() => {
     socket.emit("userOnline", userId);
@@ -31,8 +40,13 @@ const AdminDashboard = () => {
       }));
     });
 
+    socket.on("notification", (data) => {
+      setNotifications((prev) => [data, ...prev]);
+    });
+
     return () => {
       socket.off("receiveMessage");
+      socket.off("notification");
     };
   }, []);
 
@@ -47,6 +61,22 @@ const AdminDashboard = () => {
       .then((data) => setDepartments(data || []))
       .catch(() => setDepartments([]));
   }, []);
+
+
+  useEffect(() => {
+    fetchNotifications();
+  }, []);
+
+  const fetchNotifications = async () => {
+    try {
+      const res = await API.get("/admin/notifications");
+      setNotifications(res.data || []);
+      setCurrentPage(1);
+    } catch {
+      setNotifications([]);
+    }
+  };
+
 
   const handleNavigation = (page) => {
     setActive(page);
@@ -144,12 +174,19 @@ const AdminDashboard = () => {
           >
             🔔 Notifications
           </div>
+          <div
+            className="userItem"
+            onClick={() => handleNavigation("onlineUsers")}
+          >
+            🟢 Online Users
+          </div>
         </div>
 
         <div style={{ flex: 1, padding: "20px" }}>
           {active === "chat" && <Chat />}
           {active === "users" && <Users />}
           {active === "departments" && <Departments />}
+          {active === "onlineUsers" && <OnlineUsers />}
 
           {active === "notifications" && (
             <div>
@@ -195,11 +232,76 @@ const AdminDashboard = () => {
                 </p>
               </div>
 
-              {/* 🔥 SHOW NOTIFICATIONS (THIS WAS MISSING) */}
-              <Notifications />
+
+              <hr />
+
+              <h3>📜 Sent Notifications</h3>
+
+              {currentNotifications.length === 0 && <p>No notifications</p>}
+
+              {currentNotifications.map((n) => (
+                <div
+                  key={n._id}
+                  style={{
+                    background: "#f5f5f5",
+                    padding: "15px",
+                    marginBottom: "10px",
+                    borderRadius: "8px"
+                  }}
+                >
+                  <strong>🔔 {n.message}</strong>
+
+                  {n.fileUrl && (
+                    <div>
+                      <a href={n.fileUrl} target="_blank" rel="noreferrer">
+                        📎 Attachment
+                      </a>
+                    </div>
+                  )}
+
+                  <div style={{ fontSize: "12px", color: "gray" }}>
+                    {new Date(n.createdAt).toLocaleString()}
+                  </div>
+
+                  <button
+                    onClick={async () => {
+                      if (!window.confirm("Delete this notification?")) return;
+                      await API.delete(`/admin/notification/${n._id}`);
+                      fetchNotifications();
+                    }}
+                    style={{ marginTop: "5px" }}
+                  >
+                    Delete
+                  </button>
+                </div>
+              ))}
+
+
+              <div style={{ marginTop: "20px", display: "flex", gap: "10px" }}>
+  <button
+    disabled={currentPage === 1}
+    onClick={() => setCurrentPage((prev) => prev - 1)}
+  >
+    ⬅ Prev
+  </button>
+
+  <span>
+    Page {currentPage} of {totalPages || 1}
+  </span>
+
+  <button
+    disabled={currentPage === totalPages}
+    onClick={() => setCurrentPage((prev) => prev + 1)}
+  >
+    Next ➡
+  </button>
+</div>
 
             </div>
           )}
+
+
+
         </div>
       </div>
 
