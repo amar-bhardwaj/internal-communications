@@ -2,7 +2,9 @@ const onlineUsers = new Map();
 
 const Notification = require("../models/Notification");
 
+
 module.exports = (io) => {
+
   io.on("connection", (socket) => {
     console.log("🟢 Connected:", socket.id);
 
@@ -125,11 +127,17 @@ module.exports = (io) => {
 
     // ❌ DISCONNECT
     socket.on("disconnect", () => {
+      let userIdToRemove = null;
+
       for (let [uid, sid] of onlineUsers.entries()) {
         if (sid === socket.id) {
-          onlineUsers.delete(uid);
+          userIdToRemove = uid;
           break;
         }
+      }
+
+      if (userIdToRemove) {
+        onlineUsers.delete(userIdToRemove);
       }
 
       io.emit("onlineUsers", Array.from(onlineUsers.keys()));
