@@ -21,7 +21,10 @@ const userSchema = new mongoose.Schema({
   },
   department: {
     type: mongoose.Schema.Types.ObjectId,
-    ref: "Department"
+    ref: "Department",
+    required: function () {
+      return this.role !== "admin";
+    }
   }
 }, { timestamps: true });
 
